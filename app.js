@@ -8,6 +8,22 @@ let currentView = 'kits';
 
 const norm = v => String(v ?? '').toLowerCase().replace(/[″”"]/g,'').replace(/\s+/g,' ').trim();
 const unique = arr => [...new Set(arr.filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'en',{numeric:true}));
+
+const alphaCompare=(a,b)=>String(a||'').localeCompare(String(b||''),'en',{numeric:true,sensitivity:'base'});
+function displayNameKit(k){ return k.kit || k.preset || ''; }
+function displayNamePart(p){ return [p.brand,p.model].filter(Boolean).join(' ') || p.name || p.type || ''; }
+function sizeNumber(size){
+  const nums=String(size||'').replace(/,/g,'.').match(/\d+(?:\.\d+)?/g);
+  if(!nums || !nums.length) return Number.POSITIVE_INFINITY;
+  // Drum sizes are commonly depth × diameter; the last number is the useful diameter.
+  return Number(nums[nums.length-1]);
+}
+function sortKitsAZ(list){
+  return [...list].sort((a,b)=> alphaCompare(displayNameKit(a),displayNameKit(b)) || alphaCompare(a.preset,b.preset) || alphaCompare(a.mixPreset,b.mixPreset));
+}
+function sortPartsSizeAZ(list){
+  return [...list].sort((a,b)=> sizeNumber(a.size)-sizeNumber(b.size) || alphaCompare(displayNamePart(a),displayNamePart(b)) || alphaCompare(a.type,b.type));
+}
 const esc = s => String(s ?? '').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const primaryImage = o => o.image || o.realImageUrl || '';
 const imageLabel = o => o.image ? 'תמונה מתוך ה-VST' : (o.realImageUrl ? 'תמונה אמיתית' : '');
@@ -120,7 +136,7 @@ function standaloneCard(p){
 function render(){
   const f=filters();
   if(currentView==='kits'){
-    const list=kits.filter(k=>matchesKit(k,f));
+    const list=sortKitsAZ(kits.filter(k=>matchesKit(k,f)));
     $('#resultCount').textContent=list.length;
     $('#resultLabel').textContent='מערכות';
     $('#viewHint').textContent='לחיצה על מערכת פותחת פירוט מלא';
@@ -128,7 +144,7 @@ function render(){
     grid.classList.remove('hidden'); standaloneGrid.classList.add('hidden');
     showEmpty(list.length, 'kits');
   } else {
-    const list=standaloneParts.filter(p=>matchesStandalone(p,f));
+    const list=sortPartsSizeAZ(standaloneParts.filter(p=>matchesStandalone(p,f)));
     $('#resultCount').textContent=list.length;
     $('#resultLabel').textContent='פריטים בודדים';
     $('#viewHint').textContent='לחיצה על פריט פותחת את כל פרטי הסאונד והמקור';
@@ -158,7 +174,8 @@ function relatedForPart(part,currentId){
 function openKit(k){
  const cover=primaryImage(k);
  const image=safeImg(cover,k.kit||k.preset);
- const parts=k.parts.map((p,idx)=>`<div class="part" data-part-index="${idx}"><div class="part-head"><div class="part-type">${esc(p.type)}</div>${p.size?`<div class="part-size">${esc(p.size)}</div>`:''}</div><div class="part-main">${esc([p.brand,p.model].filter(Boolean).join(' · '))}</div>${p.tools?`<div class="part-tools">Tools: ${esc(p.tools)}</div>`:''}</div>`).join('');
+ const sortedParts=sortPartsSizeAZ(k.parts.map((p,originalIndex)=>({...p,originalIndex})));
+ const parts=sortedParts.map((p)=>`<div class="part" data-part-index="${p.originalIndex}"><div class="part-head"><div class="part-type">${esc(p.type)}</div>${p.size?`<div class="part-size">${esc(p.size)}</div>`:''}</div><div class="part-main">${esc([p.brand,p.model].filter(Boolean).join(' · '))}</div>${p.tools?`<div class="part-tools">Tools: ${esc(p.tools)}</div>`:''}</div>`).join('');
  $('#dialogContent').innerHTML=`<div class="dialog-scroll"><div class="dialog-top ${cover?'has-image':'placeholder'}">${image}${cover?`<div class="image-view-hint">${imageLabel(k)} · לחץ לצפייה מלאה</div>`:''}<div class="dialog-gradient"></div><button class="close-dialog" type="button">×</button><div class="dialog-title"><div class="expansion">${esc(k.expansion)} ${k.format?`• ${esc(k.format)}`:''}</div><h2>${esc(k.kit || k.preset)}</h2><p>${esc(k.preset)}${k.mixPreset?` · ${esc(k.mixPreset)}`:''}</p></div></div>
  <div class="dialog-body"><div class="info-strip"><div class="info-box"><span>הרחבה</span><b>${esc(k.expansion||'—')}</b></div><div class="info-box"><span>פורמט</span><b>${esc(k.format||'—')}</b></div><div class="info-box"><span>הוקלט / הופק ע״י</span><b>${esc(k.engineer||'—')}</b></div><div class="info-box"><span>Preset / Mix</span><b>${esc([k.preset,k.mixPreset].filter(Boolean).join(' · ')||'—')}</b></div></div>
  ${realPhotoSection(k,k.kit||k.preset)}
